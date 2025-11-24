@@ -2,6 +2,7 @@ package com.idserver.controller;
 
 import com.idserver.dto.RelayMessage;
 import com.idserver.handler.WebSocketEventHandler;
+import com.idserver.metrics.RelayMetricsTracker;
 import com.idserver.registry.PeerSessionRegistry;
 import com.idserver.service.PeerService;
 import lombok.RequiredArgsConstructor;
@@ -25,6 +26,7 @@ public class RelayController {
 	private final PeerSessionRegistry peerSessionRegistry;
 	private final SimpMessagingTemplate messagingTemplate;
 	private final WebSocketEventHandler webSocketEventHandler;
+	private final RelayMetricsTracker relayMetricsTracker;
 
 	/**
 	 * Handle relay data from peer
@@ -55,8 +57,10 @@ public class RelayController {
 		}
 
 		int base64Len = message.getBase64Data() != null ? message.getBase64Data().length() : -1;
-		log.info("RelayController: received {} message from {} to {}, base64Len={}", 
+		if (log.isDebugEnabled()) {
+			log.debug("RelayController: received {} message from {} to {}, base64Len={}",
 				message.getDataType(), sourcePeerId, targetPeerId, base64Len);
+		}
 
 		// Validate payload size
 		if (message.getBase64Data() != null && message.getBase64Data().length() > MAX_DATA_LENGTH * 2) {
@@ -96,11 +100,16 @@ public class RelayController {
 			messagingTemplate.convertAndSend("/topic/relay/" + targetPeerId, message);
 			
 			if ("SCREEN".equalsIgnoreCase(message.getDataType())) {
-				log.info("RelayController: SCREEN payload from {} to {}: base64Len={}, decodedBytes={}",
-					sourcePeerId, targetPeerId, base64Len, payloadBytes);
+				relayMetricsTracker.recordScreenFrame(base64Len, payloadBytes);
+				if (log.isDebugEnabled()) {
+					log.debug("RelayController: SCREEN payload from {} to {}: base64Len={}, decodedBytes={}",
+						sourcePeerId, targetPeerId, base64Len, payloadBytes);
+				}
 			}
-			log.info("RelayController: forwarding {} ({} bytes decoded) to /topic/relay/{}", 
+			if (log.isTraceEnabled()) {
+				log.trace("RelayController: forwarding {} ({} bytes decoded) to /topic/relay/{}",
 					message.getDataType(), payloadBytes, targetPeerId);
+			}
 
 		} catch (Exception e) {
 			log.error("Error relaying message: {}", e.getMessage(), e);

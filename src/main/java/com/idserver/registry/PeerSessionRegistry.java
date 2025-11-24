@@ -37,5 +37,12 @@ public class PeerSessionRegistry {
 	public String getPeerId(String sessionId) {
 		return sessionPeers.get(sessionId);
 	}
+
+	/**
+	 * Get count of active WebSocket sessions
+	 */
+	public int getActiveSessionCount() {
+		return sessionPeers.size();
+	}
 }
 

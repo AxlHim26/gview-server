@@ -40,19 +40,35 @@ public class WebSocketEventHandler {
 	public void handleWebSocketDisconnectListener(SessionDisconnectEvent event) {
 		StompHeaderAccessor headerAccessor = StompHeaderAccessor.wrap(event.getMessage());
 		String sessionId = headerAccessor.getSessionId();
-		log.info("WebSocket session disconnected: {}", sessionId);
+		String closeStatus = headerAccessor.getFirstNativeHeader("close-status");
+		
+		// Check if this was an abnormal disconnect (not graceful close)
+		boolean abnormal = closeStatus != null && !closeStatus.contains("NORMAL");
+		
+		if (abnormal) {
+			log.warn("WebSocket session disconnected abnormally: sessionId={}, closeStatus={}", 
+				sessionId, closeStatus);
+		} else {
+			log.info("WebSocket session disconnected: sessionId={}", sessionId);
+		}
 		
 		// Clean up activity tracking
-		sessionLastActivity.remove(sessionId);
+		Long lastActivity = sessionLastActivity.remove(sessionId);
+		if (lastActivity != null && abnormal) {
+			long inactiveTime = System.currentTimeMillis() - lastActivity;
+			if (inactiveTime > 30000) {
+				log.debug("Session {} was inactive for {}ms before disconnect", sessionId, inactiveTime);
+			}
+		}
 		
 		// Mark peer offline IMMEDIATELY
 		String peerId = peerSessionRegistry.getPeerId(sessionId);
 		if (peerId != null) {
 			peerService.markOffline(sessionId);
 			peerSessionRegistry.removeBySessionId(sessionId);
-			log.info("Marked peer offline immediately: {}", peerId);
+			log.info("Marked peer offline: peerId={}, abnormal={}", peerId, abnormal);
 		} else {
-			log.warn("No peer found for disconnected session: {}", sessionId);
+			log.debug("No peer found for disconnected session: {}", sessionId);
 		}
 	}
 

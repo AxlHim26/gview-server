@@ -121,15 +121,37 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 		return new StompSubProtocolErrorHandler() {
 			@Override
 			public Message<byte[]> handleClientMessageProcessingError(Message<byte[]> clientMessage, Throwable ex) {
-				log.error("STOMP client message processing error: {}", ex.getMessage(), ex);
+				String errorMsg = ex.getMessage();
+				String sessionId = clientMessage != null ? 
+					(String) clientMessage.getHeaders().get("simpSessionId") : "unknown";
+				
+				// Detect common slow client / buffer issues
+				if (errorMsg != null) {
+					if (errorMsg.contains("sendTimeLimit") || errorMsg.contains("timeout")) {
+						log.warn("STOMP sendTimeLimit exceeded for session {} - client may be too slow or network congested", 
+							sessionId);
+					} else if (errorMsg.contains("buffer") || errorMsg.contains("size limit")) {
+						log.warn("STOMP buffer limit exceeded for session {} - message too large or client too slow", 
+							sessionId);
+					} else {
+						log.error("STOMP client message processing error (session={}): {}", sessionId, errorMsg, ex);
+					}
+				} else {
+					log.error("STOMP client message processing error (session={}): {}", sessionId, ex.getClass().getSimpleName(), ex);
+				}
 				return super.handleClientMessageProcessingError(clientMessage, ex);
 			}
 
 			@Override
 			public Message<byte[]> handleErrorMessageToClient(Message<byte[]> errorMessage) {
-				log.error("STOMP error message to client: headers={}, payload={}",
-					errorMessage.getHeaders(),
-					new String(errorMessage.getPayload()));
+				// Log error details but don't spam - only log if it's a significant issue
+				Object errorType = errorMessage.getHeaders().get("errorType");
+				if (errorType != null && !errorType.toString().contains("heartbeat")) {
+					log.warn("STOMP error message to client: type={}, payload={}",
+						errorType,
+						new String(errorMessage.getPayload()).substring(0, 
+							Math.min(200, errorMessage.getPayload().length))); // Limit log size
+				}
 				return super.handleErrorMessageToClient(errorMessage);
 			}
 		};
@@ -138,10 +160,13 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 	/**
 	 * CRITICAL: Configure underlying Servlet WebSocket container buffer sizes
 	 * This prevents Tomcat/Jetty from closing connections when handling large STOMP text frames
-	 * (e.g., base64-encoded SCREEN payloads ~25-29k characters)
+	 * (e.g., base64-encoded SCREEN payloads ~40-80 KB)
 	 * 
 	 * Without this, even if STOMP messageSizeLimit is 512KB, the Servlet container
 	 * may reject frames at a lower level, causing ConnectionLostException on clients.
+	 * 
+	 * Note: This bean is only active in a servlet container context (e.g., Tomcat).
+	 * In test contexts without a servlet container, Spring Boot will skip this bean gracefully.
 	 */
 	@Bean
 	public ServletServerContainerFactoryBean createWebSocketContainer() {
@@ -149,8 +174,8 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 		container.setMaxTextMessageBufferSize(512 * 1024);   // 512 KB text buffer
 		container.setMaxBinaryMessageBufferSize(512 * 1024);  // 512 KB binary buffer
 		container.setMaxSessionIdleTimeout(60_000L);          // 60s idle timeout
-		container.setAsyncSendTimeout(20_000L);               // 20s async send timeout
-		log.info("ServletServerContainerFactoryBean configured: maxTextMessageBufferSize=512KB, maxBinaryMessageBufferSize=512KB");
+		container.setAsyncSendTimeout(20_000L);               // 20s async send timeout (WAN-friendly)
+		log.info("ServletServerContainerFactoryBean configured: maxTextMessageBufferSize=512KB, maxBinaryMessageBufferSize=512KB, asyncSendTimeout=20s, idleTimeout=60s");
 		return container;
 	}
 
@@ -161,7 +186,10 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 	public void logWebSocketConfig() {
 		log.info("=== WebSocket Configuration Summary ===");
 		log.info("STOMP Transport: messageSizeLimit=512KB, sendBufferSizeLimit=512KB, sendTimeLimit=15s");
-		log.info("Servlet Container: maxTextMessageBufferSize=512KB, maxBinaryMessageBufferSize=512KB");
+		log.info("Servlet Container: maxTextMessageBufferSize=512KB, maxBinaryMessageBufferSize=512KB, asyncSendTimeout=20s, idleTimeout=60s");
+		log.info("Heartbeat: STOMP=10s, SockJS=20s");
+		log.info("Thread pools: inbound=10, outbound=10");
+		log.info("Configured for: SCREEN frames up to ~80KB base64, WAN latency tolerance");
 		log.info("========================================");
 	}
 
