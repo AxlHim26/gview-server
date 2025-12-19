@@ -40,7 +40,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 		// Create TaskScheduler locally - AVOID circular dependency
 		TaskScheduler taskScheduler = createTaskScheduler();
 		
-		config.enableSimpleBroker("/queue", "/topic", "/topic/relay")
+		config.enableSimpleBroker("/queue", "/topic")
 				.setHeartbeatValue(new long[]{10000, 10000}) // 10 second heartbeat
 				.setTaskScheduler(taskScheduler); // Provide TaskScheduler for heartbeat
 		// Prefix for messages FROM clients TO server
@@ -71,7 +71,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 		// Add String converter FIRST (for JSON strings from client)
 		messageConverters.add(new StringMessageConverter(StandardCharsets.UTF_8));
 		
-		// Then add Jackson converter (for automatic deserialization of RelayMessage objects)
+		// Then add Jackson converter (for automatic JSON deserialization of payload objects)
 		messageConverters.add(mappingJackson2MessageConverter());
 		
 		return false; // Keep other default converters
@@ -99,7 +99,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 		// CRITICAL: Add timeouts for faster disconnect detection
 		registry.setSendTimeLimit(15 * 1000) // 15 seconds send timeout
 				.setSendBufferSizeLimit(512 * 1024)
-				.setMessageSizeLimit(512 * 1024) // Increase for relay data (512KB)
+				.setMessageSizeLimit(512 * 1024) // 512KB ceiling to tolerate larger control payloads if needed
 				.setTimeToFirstMessage(30 * 1000); // 30 seconds for first message
 		log.info("WebSocketTransport configured: messageSizeLimit=512KB, sendBufferSizeLimit=512KB, sendTimeLimit=15s");
 	}
