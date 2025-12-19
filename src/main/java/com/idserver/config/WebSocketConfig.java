@@ -2,10 +2,11 @@ package com.idserver.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.converter.DefaultContentTypeResolver;
 import org.springframework.messaging.converter.MappingJackson2MessageConverter;
@@ -29,6 +30,7 @@ import java.util.List;
 
 @Configuration
 @EnableWebSocketMessageBroker
+@ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 	private static final Logger log = LoggerFactory.getLogger(WebSocketConfig.class);
 
@@ -211,4 +213,3 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 	}
 
 }
-

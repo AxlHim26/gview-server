@@ -10,6 +10,7 @@ import com.idserver.service.PeerService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.context.event.EventListener;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
@@ -23,6 +24,7 @@ import java.util.Optional;
 @Controller
 @RequiredArgsConstructor
 @Slf4j
+@ConditionalOnBean(SimpMessagingTemplate.class)
 public class MessageController {
 
 	private final PeerService peerService;
@@ -195,4 +197,3 @@ public class MessageController {
 	}
 
 }
-
