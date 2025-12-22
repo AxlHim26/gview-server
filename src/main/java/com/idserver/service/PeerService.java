@@ -10,7 +10,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.Random;
-import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 @RequiredArgsConstructor
@@ -19,7 +18,6 @@ public class PeerService {
 
 	private final PeerRepository peerRepository;
 	private final Random random = new Random();
-	private final ConcurrentHashMap<String, String> sessionCache = new ConcurrentHashMap<>();
 
 	/**
 	 * Generate unique 9-digit peer ID in format XXX-XXX-XXX
@@ -81,7 +79,6 @@ public class PeerService {
 		peer.setLastSeen(LocalDateTime.now());
 		
 		peerRepository.save(peer);
-		sessionCache.put(peerId, sessionId);
 		log.info("Updated peer info for {}: {}:{}", peerId, ipAddress, port);
 	}
 
@@ -142,7 +139,6 @@ public class PeerService {
 		peer.setSessionId(null);
 		peerRepository.save(peer);
 		
-		sessionCache.remove(peer.getPeerId());
 		log.info("Marked peer offline: {}", peer.getPeerId());
 	}
 
@@ -161,45 +157,6 @@ public class PeerService {
 		peer.setLastSeen(LocalDateTime.now());
 		peerRepository.save(peer);
 		log.debug("Heartbeat received from peer: {}", peerId);
-	}
-
-	/**
-	 * Get WebSocket session ID for a peer
-	 */
-	public Optional<String> getSessionId(String peerId) {
-		String sessionId = sessionCache.get(peerId);
-		if (sessionId != null) {
-			return Optional.of(sessionId);
-		}
-
-		Optional<Peer> peerOpt = peerRepository.findByPeerId(peerId);
-		if (peerOpt.isPresent() && peerOpt.get().getSessionId() != null) {
-			String sid = peerOpt.get().getSessionId();
-			sessionCache.put(peerId, sid);
-			return Optional.of(sid);
-		}
-
-		return Optional.empty();
-	}
-
-	/**
-	 * Check if peer is online
-	 */
-	public boolean isPeerOnline(String peerId) {
-		Optional<Peer> peerOpt = peerRepository.findByPeerId(peerId);
-		if (peerOpt.isEmpty()) {
-			return false;
-		}
-		Peer peer = peerOpt.get();
-		return peer.getOnline() != null && peer.getOnline();
-	}
-
-	/**
-	 * Get peer ID by session ID
-	 */
-	public String getPeerIdBySession(String sessionId) {
-		Optional<Peer> peerOpt = peerRepository.findBySessionId(sessionId);
-		return peerOpt.map(Peer::getPeerId).orElse(null);
 	}
 
 	/**
@@ -230,4 +187,3 @@ public class PeerService {
 	}
 
 }
-
